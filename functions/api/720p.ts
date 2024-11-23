@@ -16,7 +16,7 @@ export const onRequest: PagesFunction = async (context) => {
 
     const response = await getBingWallpaperUrl(
         idx,
-        (url) => url.replace("1920x1080", "UHD")
+        (url) => url.replace("1920x1080", "1280x720")
     );
 
     const corsHeaders = new Headers(response.headers);

@@ -1,4 +1,16 @@
-import { BingWallpaperJson } from "./types";
+/*
+ * Copyright (c) molikai-work (2024)
+ * molikai-work 的特定修改和新增部分
+ * 根据 MIT 许可证发布
+ */
+
+interface ImageItem {
+	url: string;
+}
+
+export interface BingWallpaperJson {
+	images: ImageItem[];
+}
 
 export function encodeData(data: object) {
 	const array: string[] = [];
@@ -11,61 +23,65 @@ export function encodeData(data: object) {
 	return array.join("&");
 }
 
-export function getBingWallpaperJson(lang: string): Promise<BingWallpaperJson> {
-	return new Promise((resolve, reject) => {
-		fetch("https://www.bing.com/HPImageArchive.aspx?" + encodeData({
-			format: "js",
-			mkt: lang,
-			n: "1"
-		}))
-			.then((response) => {
-				if (response.ok) {
-					return response.json();
-				} else {
-					reject(response);
-				}
-			})
-			.then(resolve)
-			.catch(reject);
-	});
+// https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=en-US
+export async function getBingWallpaperJson(idx: number): Promise<BingWallpaperJson> {
+    const response = await fetch("https://www.bing.com/HPImageArchive.aspx?" + encodeData({
+        format: "js",
+        idx: idx.toString() || "0",
+        n: "1",
+        mkt: "zh-CN"
+    }), {
+        headers: {
+            'Accept-Language': 'zh-CN'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch Bing wallpaper JSON');
+    }
+
+    return response.json();
 }
 
 export async function getBingWallpaperUrl(
-	langHeader: string | null,
-	urlModifier?: (url: string) => string
+    idx: number,
+    urlModifier?: (url: string) => string
 ) {
 	try {
-		const lang = getLangFromHeader(langHeader);
-		const json = await getBingWallpaperJson(lang);
-		const hostname = lang === "zh-CN" ? "cn.bing.com" : "www.bing.com";
+		const json = await getBingWallpaperJson(idx);
 
-		let url = "https://" + hostname + json.images[0].url;
+		let url = "https://www.bing.com" + json.images[0].url;
 		if (urlModifier) {
 			url = urlModifier(url);
 		}
 
-		const headers = new Headers();
-		headers.set("Cache-Control", "max-age=3600");
-		headers.set("Location", url);
-		headers.set("Vary", "Accept-Language");
+		const cacheKey = new Request(url, { method: 'GET' });
+		const cache = caches.default;
 
-		return new Response(null, {
-			headers: headers,
-			status: 302
-		});
+		let response = await cache.match(cacheKey);
+		if (!response) {
+			const imageResponse = await fetch(url);
+			if (!imageResponse.ok) {
+				throw new Error('Failed to fetch image');
+			}
+
+			const imageData = await imageResponse.arrayBuffer();
+			const headers = new Headers();
+			headers.set("Content-Type", imageResponse.headers.get("Content-Type") || "image/jpeg");
+			headers.set("Cache-Control", "max-age=3600");
+
+			response = new Response(imageData, {
+				status: 200,
+				headers: headers
+			});
+
+			await cache.put(cacheKey, response.clone());
+		}
+
+		return response;
 	} catch {
 		return new Response(null, {
 			status: 500
 		});
-	}
-}
-
-export function getLangFromHeader(langHeader: string | null) {
-	if (/^(yue|zh)(-cn|-hans(-[a-z]+)?)?/i.test(langHeader)) {
-		return "zh-CN";
-	} else if (langHeader?.startsWith("zh")) {
-		return "zh-TW";
-	} else {
-		return "en-US";
 	}
 }

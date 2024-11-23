@@ -1,11 +1,21 @@
-import { getBingWallpaperJson, getLangFromHeader } from "./utils";
+/*
+ * Copyright (c) molikai-work (2024)
+ * molikai-work 的特定修改和新增部分
+ * 根据 MIT 许可证发布
+ */
+
+import { getBingWallpaperJson } from "./utils";
 
 export const onRequest: PagesFunction = async (context) => {
+	const url = new URL(context.request.url);
+    let idx = parseInt(url.searchParams.get("before") || "0", 10);
+
+    if (isNaN(idx)) {
+        idx = 0;
+    }
+
 	try {
-		const lang = getLangFromHeader(
-			context.request.headers.get("accept-language")
-		);
-		const json = await getBingWallpaperJson(lang);
+		const json = await getBingWallpaperJson(idx);
 
 		const headers = new Headers();
 		headers.set("Access-Control-Allow-Origin", "*");
